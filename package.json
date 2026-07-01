@@ -1,0 +1,9 @@
+{
+  "name": "meeting-room-reservation",
+  "version": "1.0.0",
+  "description": "Meeting Room Reservation System with SQLite and Admin Panel (Zero Dependencies)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
