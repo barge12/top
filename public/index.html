@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rezervasyon Sistemi | Toplantı Odaları</title>
+  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+</head>
+
+<body>
+  <header>
+    <div class="logo">
+      <!--<i class="fa-solid fa-calendar-check"></i>-->
+      <span><img src="logo_white24.png" style="width:60px;height:90px;" /></span>
+      <span>Toplantı Odaları Rezervasyon</span>
+    </div>
+    <div class="nav-links">
+
+      <a href="admin.html" class="nav-item" id="admin-nav" style="display: none;"><i class="fa-solid fa-user-gear"></i>
+        Yönetim Paneli</a>
+      <div class="user-badge">
+        <div class="user-avatar" id="user-avatar-char">U</div>
+        <span id="user-display-name">Kullanıcı</span>
+        <button id="btn-logout" class="btn-logout" title="Çıkış Yap">
+          <i class="fa-solid fa-right-from-bracket"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Filter bar -->
+    <section class="glass filter-bar">
+      <div class="form-group">
+        <label for="filter-location"><i class="fa-solid fa-location-dot"></i> Lokasyon</label>
+        <select id="filter-location" class="form-control">
+          <option value="">Lokasyon Seçin</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="filter-room"><i class="fa-solid fa-door-open"></i> Toplantı Odası</label>
+        <select id="filter-room" class="form-control" disabled>
+          <option value="">Önce Lokasyon Seçin</option>
+        </select>
+      </div>
+      <div class="form-group" style="display: none;">
+        <label for="filter-date"><i class="fa-solid fa-calendar-day"></i> Tarih</label>
+        <input type="text" id="filter-date" class="form-control" placeholder="Tarih seçin">
+      </div>
+    </section>
+
+    <!-- Content Grid -->
+    <div class="dashboard-layout">
+      <!-- Sidebar / Quick Actions -->
+      <aside class="glass sidebar-panel">
+        <h3>Hızlı İşlemler</h3>
+        <button id="btn-open-booking-modal" class="btn btn-primary" style="width: 100%; margin-bottom: 2rem;">
+          <i class="fa-solid fa-plus"></i> Rezervasyon Yap
+        </button>
+        <button id="btn-load-user-bookings" class="btn btn-primary" style="width: 100%; margin-bottom: 2rem;">Tüm
+          Rezervasyonlarım</button>
+        <h3>Rezervasyon Tipleri</h3>
+        <ul class="legend-list">
+          <li class="legend-item">
+            <span class="legend-indicator protocol"></span>
+            <span>Protokol Toplantısı</span>
+          </li>
+          <li class="legend-item">
+            <span class="legend-indicator external"></span>
+            <span>Dış Katılımcı Toplantısı</span>
+          </li>
+          <li class="legend-item">
+            <span class="legend-indicator standard"></span>
+            <span>Standart Toplantı</span>
+          </li>
+        </ul>
+      </aside>
+
+      <!-- Timelines and Bookings -->
+      <section class="glass timeline-section" style="padding: 1rem; display: flex; flex-direction: column;">
+        <div id="calendar" style="flex: 1; min-height: 600px;"></div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Reservation Entry Modal -->
+  <div class="modal-backdrop" id="booking-modal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-calendar-plus"></i> Yeni Rezervasyon Girişi</h3>
+        <button class="close-modal" id="btn-close-booking-modal">&times;</button>
+      </div>
+      <form id="booking-form">
+        <div class="modal-body">
+          <div id="modal-alert-container"></div>
+
+          <div class="form-group">
+            <label><i class="fa-solid fa-location-dot"></i> Lokasyon</label>
+            <select id="modal-location" class="form-control" required>
+              <option value="">Lokasyon Seçin...</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label><i class="fa-solid fa-door-open"></i> Toplantı Odası</label>
+            <select id="modal-room-id" class="form-control" required disabled>
+              <option value="">Önce Lokasyon Seçin...</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="booking-title">Toplantı Konusu / Başlığı</label>
+            <input type="text" id="booking-title" class="form-control"
+              placeholder="Toplantı amacını veya konusunu girin" required>
+          </div>
+
+          <div class="form-group">
+            <label for="booking-type">Toplantı Tipi</label>
+            <select id="booking-type" class="form-control" required>
+              <option value="Standart">Standart Toplantı</option>
+              <option value="Dış Katılımcı">Dış Katılımcı</option>
+              <option value="Protokol">Protokol</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="booking-date">Tarih</label>
+            <input type="date" id="booking-date" class="form-control" required>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label for="booking-start">Başlangıç Saati</label>
+              <input type="time" id="booking-start" class="form-control" step="300" required>
+            </div>
+            <div class="form-group">
+              <label for="booking-end">Bitiş Saati</label>
+              <input type="time" id="booking-end" class="form-control" step="300" required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="booking-desc">Açıklama (İsteğe Bağlı)</label>
+            <textarea id="booking-desc" class="form-control" rows="3"
+              placeholder="Ek detaylar, katılan ekipler veya protokol notları..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-booking">İptal</button>
+          <button type="submit" class="btn btn-primary">Kaydet <i class="fa-solid fa-save"></i></button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
