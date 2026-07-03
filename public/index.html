@@ -32,32 +32,30 @@
   </header>
 
   <main>
-    <!-- Filter bar -->
-    <section class="glass filter-bar">
-      <div class="form-group">
-        <label for="filter-location"><i class="fa-solid fa-location-dot"></i> Lokasyon</label>
-        <select id="filter-location" class="form-control">
-          <option value="">Lokasyon Seçin</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label for="filter-room"><i class="fa-solid fa-door-open"></i> Toplantı Odası</label>
-        <select id="filter-room" class="form-control" disabled>
-          <option value="">Önce Lokasyon Seçin</option>
-        </select>
-      </div>
-      <div class="form-group" style="display: none;">
-        <label for="filter-date"><i class="fa-solid fa-calendar-day"></i> Tarih</label>
-        <input type="text" id="filter-date" class="form-control" placeholder="Tarih seçin">
-      </div>
-    </section>
-
     <!-- Content Grid -->
     <div class="dashboard-layout">
       <!-- Sidebar / Quick Actions -->
       <aside class="glass sidebar-panel">
         <h3>Hızlı İşlemler</h3>
-        <button id="btn-open-booking-modal" class="btn btn-primary" style="width: 100%; margin-bottom: 2rem;">
+
+        <div class="form-group">
+          <label for="filter-location"><i class="fa-solid fa-location-dot"></i> Lokasyon</label>
+          <select id="filter-location" class="form-control">
+            <option value="">Lokasyon Seçin</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 1.5rem;">
+          <label for="filter-room"><i class="fa-solid fa-door-open"></i> Toplantı Odası</label>
+          <select id="filter-room" class="form-control" disabled>
+            <option value="">Önce Lokasyon Seçin</option>
+          </select>
+        </div>
+        <div class="form-group" style="display: none;">
+          <label for="filter-date"><i class="fa-solid fa-calendar-day"></i> Tarih</label>
+          <input type="text" id="filter-date" class="form-control" placeholder="Tarih seçin">
+        </div>
+
+        <button id="btn-open-booking-modal" class="btn btn-primary" style="width: 100%; margin-bottom: 1rem;">
           <i class="fa-solid fa-plus"></i> Rezervasyon Yap
         </button>
         <button id="btn-load-user-bookings" class="btn btn-primary" style="width: 100%; margin-bottom: 2rem;">Tüm

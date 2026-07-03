@@ -583,7 +583,7 @@ body.login-page .btn-primary:hover {
 
 @media (min-width: 1024px) {
   .dashboard-layout {
-    grid-template-columns: 320px 1fr;
+    grid-template-columns: 260px 1fr;
   }
 }
 
@@ -719,7 +719,7 @@ body.login-page .btn-primary:hover {
 
 /* Left Sidebar / Quick Info */
 .sidebar-panel {
-  padding: 1.5rem;
+  padding: 1.25rem;
   height: fit-content;
 }
 
@@ -857,3 +857,25 @@ body.login-page .btn-primary:hover {
 .toast { background: var(--surface-solid); border: 1px solid var(--primary); border-left: 4px solid var(--primary); color: var(--text-primary); padding: 15px 20px; border-radius: var(--radius-sm); box-shadow: 0 10px 25px rgba(0,0,0,0.5); transform: translateX(120%); transition: transform 0.3s ease-in-out; display: flex; align-items: center; gap: 10px; min-width: 300px; }
 .toast.show { transform: translateX(0); }
 .toast-icon { color: var(--primary); font-size: 1.5rem; }
+
+/* FullCalendar Customizations */
+.fc-header-toolbar.fc-toolbar {
+  padding: 1.5rem 1.25rem !important;
+  margin-bottom: 1.75rem !important;
+  gap: 1.5rem;
+}
+
+.fc-toolbar-title {
+  font-size: 1.75rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em;
+  color: #fff !important;
+}
+
+.fc-button {
+  padding: 0.65rem 1.25rem !important;
+  font-size: 0.95rem !important;
+  font-weight: 600 !important;
+  border-radius: var(--radius-sm) !important;
+  transition: var(--transition) !important;
+}
