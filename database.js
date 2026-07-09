@@ -33,9 +33,22 @@ function initDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'user'
+      role TEXT NOT NULL DEFAULT 'user',
+      active INTEGER NOT NULL DEFAULT 1
     )
   `);
+
+  // Ensure 'active' column exists in 'users' table
+  try {
+    db.prepare('SELECT active FROM users LIMIT 1').get();
+  } catch (e) {
+    try {
+      db.exec('ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1');
+      console.log('Added active column to users table.');
+    } catch (err) {
+      console.error('Failed to add active column:', err);
+    }
+  }
 
   // Create Locations Table
   db.exec(`
