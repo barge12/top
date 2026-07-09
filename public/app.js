@@ -235,6 +235,13 @@ document.addEventListener('DOMContentLoaded', () => {
         center: 'title',
         right: 'dayGridMonth,timeGridWeek,timeGridDay'
       },
+      buttonText: {
+        today: 'Bugün',
+        month: 'Ay',
+        week: 'Hafta',
+        day: 'Gün'
+      },
+      allDayText: 'Tüm Gün',
       selectable: true,
       selectMirror: true,
       height: '100%',
