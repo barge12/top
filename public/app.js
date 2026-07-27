@@ -1,4 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+      window.location.reload();
+    }
+  });
+
   let currentUser = null;
   let notificationTimeouts = [];
   let calendar = null;
@@ -106,9 +112,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
       await loadLocations();
       initCalendar();
+      loadNotifications();
     } catch (err) {
       console.error('Yetkilendirme hatası:', err);
       window.location.href = '/login.html';
+    }
+  }
+
+  // Load and display cancelled booking notifications as persistent toasts
+  async function loadNotifications() {
+    try {
+      const res = await fetch('/api/notifications');
+      if (!res.ok) return;
+      const notifications = await res.json();
+      const container = document.getElementById('notification-toast-container');
+      
+      notifications.forEach(n => {
+        const toast = document.createElement('div');
+        toast.className = 'notification-toast';
+        toast.innerHTML = `
+          <div class="notification-toast-icon"><i class="fa-solid fa-circle-exclamation"></i></div>
+          <div class="notification-toast-body">
+            <div class="notification-toast-title">Rezervasyon İptal Bildirimi</div>
+            <div class="notification-toast-msg">${n.message}</div>
+          </div>
+          <button class="notification-toast-close" data-id="${n.id}" title="Kapat">&times;</button>
+        `;
+        container.appendChild(toast);
+
+        // Trigger animation
+        requestAnimationFrame(() => toast.classList.add('show'));
+
+        toast.querySelector('.notification-toast-close').addEventListener('click', async () => {
+          toast.classList.remove('show');
+          toast.addEventListener('transitionend', () => toast.remove());
+          try {
+            await fetch(`/api/notifications/${n.id}`, { method: 'DELETE' });
+          } catch (e) {}
+        });
+      });
+    } catch (err) {
+      console.error('Bildirimler yüklenemedi:', err);
     }
   }
 
@@ -182,7 +226,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   btnOpenBookingModal.addEventListener('click', () => {
-    openBookingModal(new Date(), new Date(Date.now() + 3600000));
+    const now = new Date();
+    const coeff = 1000 * 60 * 5;
+    const roundedStart = new Date(Math.ceil(now.getTime() / coeff) * coeff);
+    const roundedEnd = new Date(roundedStart.getTime() + 3600000);
+    openBookingModal(roundedStart, roundedEnd);
   });
 
   function formatTime(d) {
@@ -289,6 +337,11 @@ document.addEventListener('DOMContentLoaded', () => {
           calendar.unselect();
           return;
         }
+        if (arg.start < new Date()) {
+          alert('Geçmiş bir tarihe veya saate rezervasyon yapamazsınız.');
+          calendar.unselect();
+          return;
+        }
         openBookingModal(arg.start, arg.end, filterLocation.value, filterRoom.value);
         calendar.unselect();
       },
@@ -303,12 +356,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const b = eventObj.extendedProps;
     const isOwner = b.user_id === currentUser.id;
     const isAdmin = currentUser.role === 'admin';
+    const isPast = new Date(b.start_time.replace(' ', 'T')) < new Date();
     
     let msg = `Toplantı: ${b.title}\nOda: ${b.room_name}\nLokasyon: ${b.location_name}\nSahibi: ${b.booked_by || 'Silinmiş Kullanıcı'}\nSaat: ${b.start_time} - ${b.end_time}`;
     if (b.description) msg += `\nNot: ${b.description}`;
     
     if (isOwner || isAdmin) {
-      if (confirm(msg + '\n\nBu rezervasyonu iptal etmek ister misiniz?')) {
+      if (isPast) {
+         alert(msg + '\n\nGeçmişteki rezervasyonlar iptal edilemez.');
+      } else if (confirm(msg + '\n\nBu rezervasyonu iptal etmek ister misiniz?')) {
          deleteBookingById(b.id);
       }
     } else {
@@ -348,8 +404,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const startTime = `${dateVal} ${startHour}`;
     const endTime = `${dateVal} ${endHour}`;
 
-    if (startHour >= endHour) {
+    const startObj = new Date(`${dateVal}T${startHour}`);
+    const endObj = new Date(`${dateVal}T${endHour}`);
+
+    if (startObj < new Date()) {
+      showModalError('Hata: Geçmiş bir tarihe veya saate rezervasyon yapılamaz.');
+      return;
+    }
+
+    const durationMs = endObj - startObj;
+    if (durationMs <= 0) {
       showModalError('Hata: Bitiş saati başlangıç saatinden sonra olmalıdır.');
+      return;
+    }
+
+    if (durationMs > 12 * 60 * 60 * 1000) {
+      showModalError('Hata: Rezervasyon süresi en fazla 12 saat olabilir (Tam gün blokaj yapılamaz).');
       return;
     }
 

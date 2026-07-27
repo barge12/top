@@ -1,4 +1,10 @@
 document.addEventListener('DOMContentLoaded', () => {
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+      window.location.reload();
+    }
+  });
+
   let currentUser = null;
 
   // Elements
@@ -280,6 +286,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- KULLANICI YÖNETİMİ ---
 
+
   async function loadUsers() {
     try {
       const res = await fetch('/api/users');
@@ -298,9 +305,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const isSelf = user.id === currentUser.id;
         const deleteButton = isSelf
-          ? `<span style="font-size:0.8rem; color: var(--text-muted); font-style: italic;">Aktif Hesap</span>`
+          ? `<span style="font-size:0.8rem; color: var(--text-muted); font-style: italic; margin-right: 1rem;">Aktif Hesap</span>`
           : `<button class="btn-icon-delete delete-user-btn" data-id="${user.id}" title="Kullanıcıyı Sil">
               <i class="fa-solid fa-trash-can"></i>
+             </button>`;
+
+        const resetPasswordButton = `<button class="btn-icon-delete reset-password-btn" style="color: var(--secondary); margin-right: 10px;" data-id="${user.id}" data-username="${escapeHTML(user.username)}" title="Şifreyi Sıfırla">
+              <i class="fa-solid fa-key"></i>
              </button>`;
 
         const roleBadge = user.role === 'admin'
@@ -313,6 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ${roleBadge}
           </div>
           <div>
+            ${resetPasswordButton}
             ${deleteButton}
           </div>
         `;
@@ -324,11 +336,15 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', deleteUser);
       });
 
+      // Add reset password listeners
+      document.querySelectorAll('.reset-password-btn').forEach(btn => {
+        btn.addEventListener('click', resetUserPassword);
+      });
+
     } catch (err) {
       showGlobalAlert('Kullanıcı listesi yüklenemedi.', 'danger');
     }
   }
-
   // --- BOOKINGS MANAGEMENT ---
   async function loadAllBookings() {
     try {
@@ -415,6 +431,33 @@ document.addEventListener('DOMContentLoaded', () => {
       showGlobalAlert(err.message, 'danger');
     }
   });
+
+  async function resetUserPassword(e) {
+    const id = e.currentTarget.getAttribute('data-id');
+    const username = e.currentTarget.getAttribute('data-username');
+
+    const newPassword = prompt(`"${username}" kullanıcısı için yeni bir şifre girin (en az 6 karakter):`);
+    if (!newPassword) return;
+
+    if (newPassword.length < 6) {
+      showGlobalAlert('Yeni şifre en az 6 karakter olmalıdır.', 'danger');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/users/${id}/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Şifre sıfırlanamadı.');
+
+      showGlobalAlert(data.message || 'Şifre başarıyla sıfırlandı.', 'success');
+    } catch (err) {
+      showGlobalAlert(err.message, 'danger');
+    }
+  }
 
   async function deleteUser(e) {
     const id = e.currentTarget.getAttribute('data-id');

@@ -32,11 +32,25 @@
         <div class="form-group">
           <label for="password">Şifre</label>
           <input type="password" id="password" class="form-control" placeholder="Şifrenizi girin" required
-            autocomplete="current-password">
+            autocomplete="current-password" oncopy="return false;" onpaste="return false;" oncut="return false;">
         </div>
 
         <button type="submit" class="btn btn-primary" style="width: 100%;">
           Giriş Yap
+        </button>
+      </form>
+
+      <form id="reset-password-form" style="display: none;">
+        <div style="margin-bottom: 1rem; color: #4292d6; font-size: 0.9rem; font-weight: 500; text-align: center;">
+          Lütfen hesabınız için yeni bir şifre belirleyin.
+        </div>
+        <div class="form-group">
+          <label for="new-password">Yeni Şifre</label>
+          <input type="password" id="new-password" class="form-control" placeholder="En az 6 karakter girin" required>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%;">
+          Şifreyi Değiştir ve Devam Et
         </button>
       </form>
 
@@ -57,7 +71,11 @@
       });
 
     const form = document.getElementById('login-form');
+    const resetForm = document.getElementById('reset-password-form');
     const alertContainer = document.getElementById('alert-container');
+
+    let tempUsername = '';
+    let tempOldPassword = '';
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -65,15 +83,12 @@
       const username = document.getElementById('username').value;
       const password = document.getElementById('password').value;
 
-      // Clear alerts
       alertContainer.innerHTML = '';
 
       try {
         const res = await fetch('/api/auth/login', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password })
         });
 
@@ -83,8 +98,77 @@
           throw new Error(data.error || 'Giriş yapılamadı.');
         }
 
-        // Redirect to main page
+        if (data.requirePasswordChange) {
+          tempUsername = username;
+          tempOldPassword = password;
+          form.style.display = 'none';
+          resetForm.style.display = 'block';
+          alertContainer.innerHTML = `
+            <div class="alert-box alert-success" style="margin-top: 10px;">
+              <i class="fa-solid fa-circle-check"></i>
+              <span>Geçici şifreyle giriş başarılı, lütfen şifrenizi yenileyin.</span>
+            </div>
+          `;
+          return;
+        }
+
         window.location.href = '/index.html';
+      } catch (err) {
+        alertContainer.innerHTML = `
+          <div class="alert-box alert-danger" style="margin-top: 10px;">
+            <i class="fa-solid fa-circle-exclamation"></i>
+            <span>${err.message}</span>
+          </div>
+        `;
+      }
+    });
+
+    resetForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const newPassword = document.getElementById('new-password').value;
+      
+      alertContainer.innerHTML = '';
+      
+      if (newPassword.length < 6) {
+        alertContainer.innerHTML = `
+          <div class="alert-box alert-danger" style="margin-top: 10px;">
+            <i class="fa-solid fa-circle-exclamation"></i>
+            <span>Yeni şifre en az 6 karakter olmalıdır.</span>
+          </div>
+        `;
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/reset-forced-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            username: tempUsername, 
+            oldPassword: tempOldPassword, 
+            newPassword 
+          })
+        });
+
+        const data = await res.json();
+        
+        if (!res.ok) {
+          throw new Error(data.error || 'Şifre güncellenemedi.');
+        }
+
+        // Success, switch back to login to re-authenticate with new password
+        resetForm.style.display = 'none';
+        form.style.display = 'block';
+        document.getElementById('password').value = '';
+        tempUsername = '';
+        tempOldPassword = '';
+        
+        alertContainer.innerHTML = `
+          <div class="alert-box alert-success" style="margin-top: 10px;">
+            <i class="fa-solid fa-circle-check"></i>
+            <span>${data.message}</span>
+          </div>
+        `;
       } catch (err) {
         alertContainer.innerHTML = `
           <div class="alert-box alert-danger" style="margin-top: 10px;">
