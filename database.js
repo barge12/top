@@ -34,7 +34,8 @@ function initDb() {
       username TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'user',
-      active INTEGER NOT NULL DEFAULT 1
+      active INTEGER NOT NULL DEFAULT 1,
+      must_change_password INTEGER NOT NULL DEFAULT 0
     )
   `);
 
@@ -47,6 +48,18 @@ function initDb() {
       console.log('Added active column to users table.');
     } catch (err) {
       console.error('Failed to add active column:', err);
+    }
+  }
+
+  // Ensure 'must_change_password' column exists in 'users' table
+  try {
+    db.prepare('SELECT must_change_password FROM users LIMIT 1').get();
+  } catch (e) {
+    try {
+      db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0');
+      console.log('Added must_change_password column to users table.');
+    } catch (err) {
+      console.error('Failed to add must_change_password column:', err);
     }
   }
 
@@ -83,6 +96,17 @@ function initDb() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    )
+  `);
+
+  // Create Notifications Table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      message TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
 

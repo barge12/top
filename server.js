@@ -7,6 +7,32 @@ const { initDb, getDb, hashPassword, verifyPassword } = require('./database');
 
 const PORT = 80;
 
+// Cookie Encryption Setup
+const COOKIE_SECRET = crypto.randomBytes(32);
+
+function encryptCookie(text) {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-cbc', COOKIE_SECRET, iv);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return iv.toString('hex') + ':' + encrypted;
+}
+
+function decryptCookie(text) {
+  try {
+    const textParts = text.split(':');
+    if (textParts.length !== 2) return null;
+    const iv = Buffer.from(textParts[0], 'hex');
+    const encryptedText = Buffer.from(textParts[1], 'hex');
+    const decipher = crypto.createDecipheriv('aes-256-cbc', COOKIE_SECRET, iv);
+    let decrypted = decipher.update(encryptedText);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    return decrypted.toString('utf8');
+  } catch (err) {
+    return null;
+  }
+}
+
 // Session Management (In-Memory)
 const sessions = new Map(); // token -> sessionObj
 
@@ -53,7 +79,13 @@ function getRequestBody(req) {
 
 // Response helpers
 function sendJSON(res, data, status = 200) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.writeHead(status, { 
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'Surrogate-Control': 'no-store'
+  });
   res.end(JSON.stringify(data));
 }
 
@@ -62,7 +94,13 @@ function sendError(res, message, status = 400) {
 }
 
 function sendRedirect(res, location) {
-  res.writeHead(302, { 'Location': location });
+  res.writeHead(302, { 
+    'Location': location,
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'Surrogate-Control': 'no-store'
+  });
   res.end();
 }
 
@@ -73,7 +111,11 @@ async function handleRequest(req, res) {
 
   // 1. Session & Auth Retrieval
   const cookies = parseCookies(req.headers.cookie);
-  const sessionToken = cookies.session_token;
+  const encryptedSessionToken = cookies.session_token;
+  let sessionToken = null;
+  if (encryptedSessionToken) {
+    sessionToken = decryptCookie(encryptedSessionToken);
+  }
   let session = null;
 
   if (sessionToken && sessions.has(sessionToken)) {
@@ -130,6 +172,14 @@ async function handleRequest(req, res) {
         return sendError(res, 'Hatalı kullanıcı adı veya şifre.', 401);
       }
 
+      if (user.must_change_password === 1) {
+        return sendJSON(res, {
+          success: true,
+          requirePasswordChange: true,
+          username: user.username
+        });
+      }
+
       // Generate session token
       const token = crypto.randomBytes(24).toString('hex');
       sessions.set(token, {
@@ -139,9 +189,12 @@ async function handleRequest(req, res) {
         expires: Date.now() + 24 * 60 * 60 * 1000 // 1 day
       });
 
+      // Encrypt token for cookie
+      const encryptedToken = encryptCookie(token);
+
       // Set cookie
       res.writeHead(200, {
-        'Set-Cookie': `session_token=${token}; HttpOnly; Path=/; Max-Age=86400`,
+        'Set-Cookie': `session_token=${encryptedToken}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400`,
         'Content-Type': 'application/json; charset=utf-8'
       });
       return res.end(JSON.stringify({
@@ -160,10 +213,39 @@ async function handleRequest(req, res) {
       sessions.delete(sessionToken);
     }
     res.writeHead(200, {
-      'Set-Cookie': 'session_token=; HttpOnly; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+      'Set-Cookie': 'session_token=; HttpOnly; Secure; SameSite=Strict; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT',
       'Content-Type': 'application/json; charset=utf-8'
     });
     return res.end(JSON.stringify({ success: true }));
+  }
+
+  // AUTH API: POST /api/auth/reset-forced-password
+  if (pathname === '/api/auth/reset-forced-password' && req.method === 'POST') {
+    try {
+      const { username, oldPassword, newPassword } = await getRequestBody(req);
+      if (!username || !oldPassword || !newPassword) {
+        return sendError(res, 'Gerekli bilgiler eksik.');
+      }
+      if (newPassword.length < 6) {
+        return sendError(res, 'Yeni şifre en az 6 karakter olmalıdır.');
+      }
+      
+      const db = getDb();
+      const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+      if (!user) return sendError(res, 'Kullanıcı bulunamadı.', 404);
+      if (user.active === 0) return sendError(res, 'Kullanıcı pasif.', 403);
+      if (user.must_change_password !== 1) return sendError(res, 'Bu işlem sadece şifre sıfırlama zorunluluğu olduğunda yapılabilir.', 400);
+
+      const isMatch = verifyPassword(oldPassword, user.password);
+      if (!isMatch) return sendError(res, 'Eski (geçici) şifre yanlış.', 401);
+
+      const hashed = hashPassword(newPassword);
+      db.prepare('UPDATE users SET password = ?, must_change_password = 0 WHERE id = ?').run(hashed, user.id);
+      
+      return sendJSON(res, { success: true, message: 'Şifreniz başarıyla güncellendi. Giriş yapabilirsiniz.' });
+    } catch (err) {
+      return sendError(res, err.message, 500);
+    }
   }
 
   // For all other /api routes, check login
@@ -322,8 +404,20 @@ async function handleRequest(req, res) {
           return sendError(res, 'Admin kullanıcıları rezervasyon yapamaz.', 403);
         }
 
-        if (startTime >= endTime) {
+        const startObj = new Date(startTime.replace(' ', 'T'));
+        const endObj = new Date(endTime.replace(' ', 'T'));
+
+        if (startObj < new Date()) {
+          return sendError(res, 'Geçmiş bir tarihe veya saate rezervasyon yapılamaz.');
+        }
+
+        const durationMs = endObj - startObj;
+        if (durationMs <= 0) {
           return sendError(res, 'Bitiş saati başlangıç saatinden sonra olmalıdır.');
+        }
+
+        if (durationMs > 12 * 60 * 60 * 1000) {
+          return sendError(res, 'Rezervasyon süresi en fazla 12 saat olabilir.');
         }
 
         // Verify room
@@ -377,6 +471,19 @@ async function handleRequest(req, res) {
         // Authorization: Admin can cancel any, standard user only their own
         if (!isAdmin() && booking.user_id !== session.userId) {
           return sendError(res, 'Başkasının rezervasyonunu silemezsiniz.', 403);
+        }
+
+        const startObj = new Date(booking.start_time.replace(' ', 'T'));
+        if (startObj < new Date()) {
+          return sendError(res, 'Geçmişteki rezervasyonlar iptal edilemez.', 400);
+        }
+
+        // If admin is cancelling someone else's booking, create a notification for the owner
+        if (isAdmin() && booking.user_id && booking.user_id !== session.userId) {
+          const room = db.prepare('SELECT r.name as room_name, l.name as location_name FROM rooms r JOIN locations l ON r.location_id = l.id WHERE r.id = ?').get(booking.room_id);
+          const roomInfo = room ? `${room.location_name} - ${room.room_name}` : 'Bilinmeyen Oda';
+          const msg = `Rezervasyonunuz yönetici tarafından iptal edildi: "${booking.title}" | ${roomInfo} | ${booking.start_time} - ${booking.end_time.split(' ')[1]}`;
+          db.prepare('INSERT INTO notifications (user_id, message) VALUES (?, ?)').run(booking.user_id, msg);
         }
 
         db.prepare('DELETE FROM bookings WHERE id = ?').run(id);
@@ -434,6 +541,29 @@ async function handleRequest(req, res) {
       }
     }
 
+    // PUT /api/users/:id/password (Admin Only)
+    if (pathname.match(/^\/api\/users\/\d+\/password$/) && req.method === 'PUT') {
+      if (!isAdmin()) return sendError(res, 'Bu işlem için yetkiniz yok.', 403);
+      try {
+        const id = parseInt(pathname.split('/')[3]);
+        const { newPassword } = await getRequestBody(req);
+
+        if (!newPassword || newPassword.length < 6) {
+          return sendError(res, 'Yeni şifre en az 6 karakter olmalıdır.');
+        }
+
+        const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+        if (!user) return sendError(res, 'Kullanıcı bulunamadı.', 404);
+
+        const hashed = hashPassword(newPassword);
+        db.prepare('UPDATE users SET password = ?, must_change_password = 1 WHERE id = ?').run(hashed, id);
+        
+        return sendJSON(res, { success: true, message: 'Kullanıcının şifresi değiştirildi. İlk girişte şifre yenilemesi gerekecek.' });
+      } catch (err) {
+        return sendError(res, 'Şifre güncellenemedi.', 500);
+      }
+    }
+
     // 12. Users DELETE /api/users/:id (Admin Only)
     if (pathname.startsWith('/api/users/') && req.method === 'DELETE') {
       if (!isAdmin()) return sendError(res, 'Bu işlem için yetkiniz yok.', 403);
@@ -448,10 +578,34 @@ async function handleRequest(req, res) {
         const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
         if (!user) return sendError(res, 'Kullanıcı bulunamadı.', 404);
 
+        db.prepare('DELETE FROM bookings WHERE user_id = ?').run(id);
         db.prepare('DELETE FROM users WHERE id = ?').run(id);
-        return sendJSON(res, { success: true, message: 'Kullanıcı başarıyla silindi.' });
+        return sendJSON(res, { success: true, message: 'Kullanıcı ve ona ait tüm rezervasyonlar başarıyla silindi.' });
       } catch (err) {
         return sendError(res, 'Kullanıcı silinemedi.', 500);
+      }
+    }
+
+    // Notifications GET /api/notifications
+    if (pathname === '/api/notifications' && req.method === 'GET') {
+      try {
+        const notifications = db.prepare('SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC').all(session.userId);
+        return sendJSON(res, notifications);
+      } catch (err) {
+        return sendError(res, 'Bildirimler yüklenemedi.', 500);
+      }
+    }
+
+    // Notifications DELETE /api/notifications/:id (dismiss)
+    if (pathname.match(/^\/api\/notifications\/\d+$/) && req.method === 'DELETE') {
+      try {
+        const id = parseInt(pathname.split('/')[3]);
+        const notification = db.prepare('SELECT * FROM notifications WHERE id = ? AND user_id = ?').get(id, session.userId);
+        if (!notification) return sendError(res, 'Bildirim bulunamadı.', 404);
+        db.prepare('DELETE FROM notifications WHERE id = ?').run(id);
+        return sendJSON(res, { success: true });
+      } catch (err) {
+        return sendError(res, 'Bildirim silinemedi.', 500);
       }
     }
 
@@ -510,7 +664,16 @@ async function handleRequest(req, res) {
         res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
         return res.end('Sunucu hatası.');
       }
-      res.writeHead(200, { 'Content-Type': contentType });
+      
+      const headers = { 'Content-Type': contentType };
+      if (ext === '.html') {
+        headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, proxy-revalidate';
+        headers['Pragma'] = 'no-cache';
+        headers['Expires'] = '0';
+        headers['Surrogate-Control'] = 'no-store';
+      }
+      
+      res.writeHead(200, headers);
       res.end(content);
     });
   });
