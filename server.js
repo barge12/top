@@ -79,7 +79,7 @@ function getRequestBody(req) {
 
 // Response helpers
 function sendJSON(res, data, status = 200) {
-  res.writeHead(status, { 
+  res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
     'Pragma': 'no-cache',
@@ -94,7 +94,7 @@ function sendError(res, message, status = 400) {
 }
 
 function sendRedirect(res, location) {
-  res.writeHead(302, { 
+  res.writeHead(302, {
     'Location': location,
     'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
     'Pragma': 'no-cache',
@@ -102,6 +102,21 @@ function sendRedirect(res, location) {
     'Surrogate-Control': 'no-store'
   });
   res.end();
+}
+
+// Audit Logger Helper
+function logAudit(userId, username, action, details = null) {
+  try {
+    const db = getDb();
+    db.prepare('INSERT INTO audit_logs (user_id, username, action, details, created_at) VALUES (?, ?, ?, ?, datetime(\'now\', \'+3 hours\'))').run(
+      userId || null,
+      username || 'Sistem',
+      action,
+      details || null
+    );
+  } catch (e) {
+    console.error('Audit log kaydedilemedi:', e);
+  }
 }
 
 // Request Handler
@@ -121,9 +136,18 @@ async function handleRequest(req, res) {
   if (sessionToken && sessions.has(sessionToken)) {
     const s = sessions.get(sessionToken);
     if (s.expires > Date.now()) {
-      session = s;
-      // Refresh session expiration (extend by 1 day)
-      s.expires = Date.now() + 24 * 60 * 60 * 1000;
+      try {
+        const dbUser = getDb().prepare('SELECT id, active FROM users WHERE id = ?').get(s.userId);
+        if (!dbUser || dbUser.active === 0) {
+          sessions.delete(sessionToken);
+        } else {
+          session = s;
+          // Refresh session expiration (extend by 1 day)
+          s.expires = Date.now() + 24 * 60 * 60 * 1000;
+        }
+      } catch (e) {
+        session = s;
+      }
     } else {
       sessions.delete(sessionToken);
     }
@@ -189,6 +213,8 @@ async function handleRequest(req, res) {
         expires: Date.now() + 24 * 60 * 60 * 1000 // 1 day
       });
 
+      logAudit(user.id, user.username, 'Kullanıcı Girişi', 'Sisteme başarıyla giriş yapıldı.');
+
       // Encrypt token for cookie
       const encryptedToken = encryptCookie(token);
 
@@ -209,6 +235,9 @@ async function handleRequest(req, res) {
 
   // AUTH API: POST /api/auth/logout
   if (pathname === '/api/auth/logout' && req.method === 'POST') {
+    if (session) {
+      logAudit(session.userId, session.username, 'Çıkış Yapıldı', 'Kullanıcı oturumu sonlandırdı.');
+    }
     if (sessionToken) {
       sessions.delete(sessionToken);
     }
@@ -229,7 +258,7 @@ async function handleRequest(req, res) {
       if (newPassword.length < 6) {
         return sendError(res, 'Yeni şifre en az 6 karakter olmalıdır.');
       }
-      
+
       const db = getDb();
       const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
       if (!user) return sendError(res, 'Kullanıcı bulunamadı.', 404);
@@ -241,7 +270,9 @@ async function handleRequest(req, res) {
 
       const hashed = hashPassword(newPassword);
       db.prepare('UPDATE users SET password = ?, must_change_password = 0 WHERE id = ?').run(hashed, user.id);
-      
+
+      logAudit(user.id, user.username, 'Şifre Yenileme', 'Geçici şifre ile yeni şifre belirlendi.');
+
       return sendJSON(res, { success: true, message: 'Şifreniz başarıyla güncellendi. Giriş yapabilirsiniz.' });
     } catch (err) {
       return sendError(res, err.message, 500);
@@ -275,6 +306,7 @@ async function handleRequest(req, res) {
 
         const stmt = db.prepare('INSERT INTO locations (name) VALUES (?)');
         const result = stmt.run(name.trim());
+        logAudit(session.userId, session.username, 'Lokasyon Eklendi', `Lokasyon: "${name.trim()}"`);
         return sendJSON(res, { id: result.lastInsertRowid, name: name.trim() }, 201);
       } catch (err) {
         if (err.message.includes('UNIQUE constraint failed')) {
@@ -290,8 +322,10 @@ async function handleRequest(req, res) {
       try {
         const parts = pathname.split('/');
         const id = parts[3];
+        const loc = db.prepare('SELECT name FROM locations WHERE id = ?').get(id);
         const stmt = db.prepare('DELETE FROM locations WHERE id = ?');
         stmt.run(id);
+        logAudit(session.userId, session.username, 'Lokasyon Silindi', `Silinen Lokasyon: "${loc ? loc.name : id}"`);
         return sendJSON(res, { success: true, message: 'Lokasyon başarıyla silindi.' });
       } catch (err) {
         return sendError(res, 'Lokasyon silinemedi.', 500);
@@ -326,6 +360,7 @@ async function handleRequest(req, res) {
 
         const stmt = db.prepare('INSERT INTO rooms (location_id, name) VALUES (?, ?)');
         const result = stmt.run(locationId, name.trim());
+        logAudit(session.userId, session.username, 'Oda Eklendi', `Oda: "${name.trim()}" (${loc.name})`);
         return sendJSON(res, { id: result.lastInsertRowid, location_id: locationId, name: name.trim() }, 201);
       } catch (err) {
         if (err.message.includes('UNIQUE constraint failed')) {
@@ -341,8 +376,10 @@ async function handleRequest(req, res) {
       try {
         const parts = pathname.split('/');
         const id = parts[3];
+        const rm = db.prepare('SELECT name FROM rooms WHERE id = ?').get(id);
         const stmt = db.prepare('DELETE FROM rooms WHERE id = ?');
         stmt.run(id);
+        logAudit(session.userId, session.username, 'Oda Silindi', `Silinen Oda: "${rm ? rm.name : id}"`);
         return sendJSON(res, { success: true, message: 'Oda başarıyla silindi.' });
       } catch (err) {
         return sendError(res, 'Oda silinemedi.', 500);
@@ -383,8 +420,7 @@ async function handleRequest(req, res) {
         query += ` ORDER BY b.start_time ASC`;
 
         const bookings = db.prepare(query).all(...params);
-        console.log('🔍 Bookings retrieved:', bookings.length);
-        return sendJSON(res, bookings);
+        console.log('Bookings retrieved:', bookings.length);
         return sendJSON(res, bookings);
       } catch (err) {
         return sendError(res, 'Rezervasyonlar getirilemedi.', 500);
@@ -406,6 +442,22 @@ async function handleRequest(req, res) {
 
         const startObj = new Date(startTime.replace(' ', 'T'));
         const endObj = new Date(endTime.replace(' ', 'T'));
+
+        if (isNaN(startObj.getTime()) || isNaN(endObj.getTime())) {
+          return sendError(res, 'Geçersiz tarih veya saat formatı.');
+        }
+
+        // Validate date string matches actual date (e.g. reject Feb 30)
+        const [datePart, timePart] = startTime.split(' ');
+        const [yearS, monthS, dayS] = datePart.split('-').map(Number);
+        if (startObj.getFullYear() !== yearS || startObj.getMonth() + 1 !== monthS || startObj.getDate() !== dayS) {
+          return sendError(res, 'Geçersiz başlangıç tarihi.');
+        }
+        const [datePart2, timePart2] = endTime.split(' ');
+        const [yearE, monthE, dayE] = datePart2.split('-').map(Number);
+        if (endObj.getFullYear() !== yearE || endObj.getMonth() + 1 !== monthE || endObj.getDate() !== dayE) {
+          return sendError(res, 'Geçersiz bitiş tarihi.');
+        }
 
         if (startObj < new Date()) {
           return sendError(res, 'Geçmiş bir tarihe veya saate rezervasyon yapılamaz.');
@@ -441,6 +493,8 @@ async function handleRequest(req, res) {
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `);
         const result = stmt.run(roomId, session.userId, title.trim(), startTime, endTime, type, description?.trim() || null);
+
+        logAudit(session.userId, session.username, 'Rezervasyon Oluşturuldu', `Konu: "${title.trim()}" | Oda: ${room.name} | Saat: ${startTime} - ${endTime.split(' ')[1]}`);
 
         return sendJSON(res, {
           success: true,
@@ -487,6 +541,9 @@ async function handleRequest(req, res) {
         }
 
         db.prepare('DELETE FROM bookings WHERE id = ?').run(id);
+
+        logAudit(session.userId, session.username, 'Rezervasyon İptal Edildi', `İptal Edilen Konu: "${booking.title}" | Saat: ${booking.start_time} - ${booking.end_time.split(' ')[1]}`);
+
         return sendJSON(res, { success: true, message: 'Rezervasyon iptal edildi.' });
       } catch (err) {
         return sendError(res, 'Rezervasyon silinemedi.', 500);
@@ -529,6 +586,8 @@ async function handleRequest(req, res) {
         const stmt = db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)');
         const result = stmt.run(cleanUsername, hashed, role);
 
+        logAudit(session.userId, session.username, 'Kullanıcı Oluşturuldu', `Kullanıcı: "${cleanUsername}", Rol: ${role}`);
+
         return sendJSON(res, {
           success: true,
           user: { id: result.lastInsertRowid, username: cleanUsername, role }
@@ -557,7 +616,9 @@ async function handleRequest(req, res) {
 
         const hashed = hashPassword(newPassword);
         db.prepare('UPDATE users SET password = ?, must_change_password = 1 WHERE id = ?').run(hashed, id);
-        
+
+        logAudit(session.userId, session.username, 'Şifre Sıfırlandı', `Kullanıcı: "${user.username}" için şifre sıfırlandı`);
+
         return sendJSON(res, { success: true, message: 'Kullanıcının şifresi değiştirildi. İlk girişte şifre yenilemesi gerekecek.' });
       } catch (err) {
         return sendError(res, 'Şifre güncellenemedi.', 500);
@@ -580,9 +641,30 @@ async function handleRequest(req, res) {
 
         db.prepare('DELETE FROM bookings WHERE user_id = ?').run(id);
         db.prepare('DELETE FROM users WHERE id = ?').run(id);
+
+        // Immediately invalidate all active sessions of the deleted user
+        for (const [token, s] of sessions.entries()) {
+          if (s.userId === id) {
+            sessions.delete(token);
+          }
+        }
+
+        logAudit(session.userId, session.username, 'Kullanıcı Silindi', `Silinen Kullanıcı: "${user.username}"`);
+
         return sendJSON(res, { success: true, message: 'Kullanıcı ve ona ait tüm rezervasyonlar başarıyla silindi.' });
       } catch (err) {
         return sendError(res, 'Kullanıcı silinemedi.', 500);
+      }
+    }
+
+    // 13. Audit Logs GET /api/audit-logs (Admin Only)
+    if (pathname === '/api/audit-logs' && req.method === 'GET') {
+      if (!isAdmin()) return sendError(res, 'Bu işlem için yetkiniz yok.', 403);
+      try {
+        const logs = db.prepare('SELECT * FROM audit_logs ORDER BY id DESC LIMIT 100').all();
+        return sendJSON(res, logs);
+      } catch (err) {
+        return sendError(res, 'İşlem geçmişi getirilemedi.', 500);
       }
     }
 
@@ -664,7 +746,7 @@ async function handleRequest(req, res) {
         res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
         return res.end('Sunucu hatası.');
       }
-      
+
       const headers = { 'Content-Type': contentType };
       if (ext === '.html') {
         headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, proxy-revalidate';
@@ -672,7 +754,7 @@ async function handleRequest(req, res) {
         headers['Expires'] = '0';
         headers['Surrogate-Control'] = 'no-store';
       }
-      
+
       res.writeHead(200, headers);
       res.end(content);
     });
