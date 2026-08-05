@@ -5,6 +5,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Global 401 Interceptor to immediately redirect deleted/unauthenticated users to login
+  const originalFetch = window.fetch;
+  window.fetch = async (...args) => {
+    const res = await originalFetch(...args);
+    if (res.status === 401) {
+      window.location.href = '/login.html';
+    }
+    return res;
+  };
+
+  // Periodic Session Heartbeat (detects user deletion within 3 seconds)
+  setInterval(async () => {
+    try {
+      const res = await originalFetch('/api/auth/me');
+      const data = await res.json();
+      if (!data.loggedIn) {
+        window.location.href = '/login.html';
+      }
+    } catch (e) {
+      window.location.href = '/login.html';
+    }
+  }, 3000);
+
   let currentUser = null;
   let notificationTimeouts = [];
   let calendar = null;
@@ -199,14 +222,29 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {}
   }
 
+  function updateUserBookingsButtonUI() {
+    if (!btnLoadUserBookings) return;
+    if (isViewingAllUserBookings) {
+      btnLoadUserBookings.innerHTML = '<i class="fa-solid fa-calendar-days"></i> Tüm Rezervasyonları Göster';
+      btnLoadUserBookings.classList.remove('btn-primary');
+      btnLoadUserBookings.classList.add('btn-secondary');
+    } else {
+      btnLoadUserBookings.innerHTML = '<i class="fa-solid fa-user-check"></i> Sadece Benim Rezervasyonlarım';
+      btnLoadUserBookings.classList.remove('btn-secondary');
+      btnLoadUserBookings.classList.add('btn-primary');
+    }
+  }
+
   filterLocation.addEventListener('change', async () => {
     await loadRoomsForSelect(filterLocation.value, filterRoom, true);
     isViewingAllUserBookings = false;
+    updateUserBookingsButtonUI();
     if(calendar) calendar.refetchEvents();
   });
 
   filterRoom.addEventListener('change', () => {
     isViewingAllUserBookings = false;
+    updateUserBookingsButtonUI();
     if(calendar) calendar.refetchEvents();
   });
 
@@ -216,11 +254,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (btnLoadUserBookings) {
     btnLoadUserBookings.addEventListener('click', () => {
-      isViewingAllUserBookings = true;
-      // reset filters visually
-      filterLocation.value = '';
-      filterRoom.innerHTML = '<option value="">Önce Lokasyon Seçin</option>';
-      filterRoom.disabled = true;
+      isViewingAllUserBookings = !isViewingAllUserBookings;
+      if (isViewingAllUserBookings) {
+        // reset filters visually
+        filterLocation.value = '';
+        filterRoom.innerHTML = '<option value="">Önce Lokasyon Seçin</option>';
+        filterRoom.disabled = true;
+      }
+      updateUserBookingsButtonUI();
       if(calendar) calendar.refetchEvents();
     });
   }

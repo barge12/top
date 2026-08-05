@@ -957,3 +957,97 @@ body.login-page .btn-primary:hover {
 .notification-toast-close:hover {
   color: #fff;
 }
+
+/* -------------------------------------
+   AUDIT LOGS SPECIFIC STYLES
+---------------------------------------- */
+.audit-log-item {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding: 0.75rem 1rem;
+}
+
+.audit-log-item.audit-row-even {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.audit-log-content {
+  width: 100%;
+}
+
+.audit-log-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.audit-action-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 50px;
+  letter-spacing: 0.02em;
+}
+
+.audit-action-badge.audit-action-create {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.audit-action-badge.audit-action-delete {
+  background: rgba(239, 68, 68, 0.12);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.audit-action-badge.audit-action-auth {
+  background: rgba(96, 165, 250, 0.12);
+  color: #93c5fd;
+  border: 1px solid rgba(96, 165, 250, 0.25);
+}
+
+.audit-action-badge.audit-action-password {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fcd34d;
+  border: 1px solid rgba(251, 191, 36, 0.25);
+}
+
+.audit-action-badge.audit-action-default {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.audit-username {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.audit-date {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.audit-details {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  padding: 0.3rem 0.5rem;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  margin-top: 0.15rem;
+  line-height: 1.5;
+  border-left: 2px solid var(--border-color);
+}

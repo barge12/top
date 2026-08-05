@@ -131,6 +131,26 @@
         <button id="load-all-bookings" class="btn btn-primary">Tüm Rezervasyonları Yükle</button>
         <div id="booking-list" class="admin-list"></div>
       </section>
+
+      <!-- 5. Audit Logs (İşlem Geçmişi) -->
+      <section class="glass admin-card" style="grid-column: 1 / -1;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+          <h2 style="border-bottom: none; padding-bottom: 0; margin-bottom: 0;">
+            <i class="fa-solid fa-clock-rotate-left" style="color: var(--secondary);"></i> İşlem Geçmişi (Audit Logs)
+          </h2>
+          <div style="display: flex; gap: 0.75rem; align-items: center;">
+            <input type="text" id="audit-search" class="form-control" placeholder="Loglarda ara (Kullanıcı, işlem vb.)..." style="width: 250px; font-size: 0.85rem; padding: 0.4rem 0.75rem;">
+            <button id="btn-refresh-audit" class="btn btn-secondary" style="font-size: 0.85rem; padding: 0.4rem 0.75rem;" title="Yenile">
+              <i class="fa-solid fa-rotate-right"></i> Yenile
+            </button>
+          </div>
+        </div>
+        <div class="admin-list-container" style="max-height: 450px;">
+          <div id="audit-list" class="admin-list">
+            <div style="padding: 1rem; text-align: center; color: var(--text-muted);">Loglar yükleniyor...</div>
+          </div>
+        </div>
+      </section>
     </div>
   </main>
 

@@ -5,6 +5,29 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Global 401 Interceptor to immediately redirect deleted/unauthenticated users to login
+  const originalFetch = window.fetch;
+  window.fetch = async (...args) => {
+    const res = await originalFetch(...args);
+    if (res.status === 401) {
+      window.location.href = '/login.html';
+    }
+    return res;
+  };
+
+  // Periodic Session Heartbeat (detects user deletion/deactivation within 3 seconds)
+  setInterval(async () => {
+    try {
+      const res = await originalFetch('/api/auth/me');
+      const data = await res.json();
+      if (!data.loggedIn || data.user.role !== 'admin') {
+        window.location.href = '/login.html';
+      }
+    } catch (e) {
+      window.location.href = '/login.html';
+    }
+  }, 3000);
+
   let currentUser = null;
 
   // Elements
@@ -82,6 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function initAdminPanel() {
     loadLocations();
     loadUsers();
+    loadAuditLogs();
   }
 
   // --- LOKASYON YÖNETİMİ ---
@@ -477,6 +501,118 @@ document.addEventListener('DOMContentLoaded', () => {
       showGlobalAlert(err.message, 'danger');
     }
   }
+
+  // --- AUDIT LOGS (İşlem Geçmişi) ---
+
+  const auditList = document.getElementById('audit-list');
+  const auditSearchInput = document.getElementById('audit-search');
+  const btnRefreshAudit = document.getElementById('btn-refresh-audit');
+  let allAuditLogs = [];
+
+  async function loadAuditLogs(filterText = '') {
+    try {
+      auditList.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Yükleniyor...</div>';
+
+      const res = await fetch('/api/audit-logs');
+      const logs = await res.json();
+      allAuditLogs = logs;
+      renderAuditLogs(logs, filterText);
+    } catch (err) {
+      auditList.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--danger);">Loglar yüklenirken hata oluştu.</div>';
+    }
+  }
+
+  function renderAuditLogs(logs, filterText = '') {
+    const filtered = filterText
+      ? logs.filter(log =>
+          (log.username && log.username.toLowerCase().includes(filterText)) ||
+          (log.action && log.action.toLowerCase().includes(filterText)) ||
+          (log.details && log.details.toLowerCase().includes(filterText))
+        )
+      : logs;
+
+    auditList.innerHTML = '';
+
+    if (filtered.length === 0) {
+      auditList.innerHTML = `<div style="padding: 1.5rem; text-align: center; color: var(--text-muted);">
+        ${filterText ? 'Aramanızla eşleşen log bulunamadı.' : 'Henüz işlem kaydı bulunmamaktadır.'}
+      </div>`;
+      return;
+    }
+
+    filtered.forEach((log, index) => {
+      const item = document.createElement('div');
+      item.className = 'admin-list-item audit-log-item';
+      if (index % 2 === 0) item.classList.add('audit-row-even');
+
+      const actionIcon = getAuditActionIcon(log.action);
+      const formattedDate = formatAuditDate(log.created_at);
+
+      item.innerHTML = `
+        <div class="audit-log-content">
+          <div class="audit-log-header">
+            <span class="audit-action-badge ${getAuditActionClass(log.action)}">
+              <i class="fa-solid ${actionIcon}"></i> ${escapeHTML(log.action)}
+            </span>
+            <span class="audit-username"><i class="fa-solid fa-user"></i> ${escapeHTML(log.username)}</span>
+            <span class="audit-date"><i class="fa-regular fa-clock"></i> ${formattedDate}</span>
+          </div>
+          ${log.details ? `<div class="audit-details">${escapeHTML(log.details)}</div>` : ''}
+        </div>
+      `;
+      auditList.appendChild(item);
+    });
+  }
+
+  function getAuditActionIcon(action) {
+    const iconMap = {
+      'Kullanıcı Girişi': 'fa-right-to-bracket',
+      'Çıkış Yapıldı': 'fa-right-from-bracket',
+      'Şifre Yenileme': 'fa-key',
+      'Şifre Sıfırlandı': 'fa-key',
+      'Lokasyon Eklendi': 'fa-location-dot',
+      'Lokasyon Silindi': 'fa-location-dot',
+      'Oda Eklendi': 'fa-door-open',
+      'Oda Silindi': 'fa-door-open',
+      'Rezervasyon Oluşturuldu': 'fa-calendar-plus',
+      'Rezervasyon İptal Edildi': 'fa-calendar-xmark',
+      'Kullanıcı Oluşturuldu': 'fa-user-plus',
+      'Kullanıcı Silindi': 'fa-user-minus'
+    };
+    return iconMap[action] || 'fa-circle-info';
+  }
+
+  function getAuditActionClass(action) {
+    if (action.includes('Silindi') || action.includes('İptal')) return 'audit-action-delete';
+    if (action.includes('Eklendi') || action.includes('Oluşturuldu')) return 'audit-action-create';
+    if (action.includes('Girişi') || action.includes('Çıkış')) return 'audit-action-auth';
+    if (action.includes('Şifre')) return 'audit-action-password';
+    return 'audit-action-default';
+  }
+
+  function formatAuditDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getDate().toString().padStart(2,'0')}.${pad(d.getMonth()+1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  // Search with debounce
+  let auditSearchTimeout = null;
+  auditSearchInput.addEventListener('input', () => {
+    clearTimeout(auditSearchTimeout);
+    auditSearchTimeout = setTimeout(() => {
+      const query = auditSearchInput.value.trim().toLowerCase();
+      renderAuditLogs(allAuditLogs, query);
+    }, 250);
+  });
+
+  // Refresh button
+  btnRefreshAudit.addEventListener('click', () => {
+    auditSearchInput.value = '';
+    loadAuditLogs();
+  });
 
   // --- ALERTS AND HELPERS ---
 
