@@ -104,7 +104,8 @@
           </div>
           <div class="form-group" style="margin-bottom: 0;">
             <label for="new-password">Şifre</label>
-            <input type="password" id="new-password" class="form-control" placeholder="En az 6 karakter" required oncopy="return false;" onpaste="return false;" oncut="return false;">
+            <input type="password" id="new-password" class="form-control" placeholder="En az 6 karakter" required
+              oncopy="return false;" onpaste="return false;" oncut="return false;">
           </div>
           <div class="form-group" style="margin-bottom: 0;">
             <label for="new-role">Yetki Rolü</label>
@@ -133,14 +134,19 @@
       </section>
 
       <!-- 5. Audit Logs (İşlem Geçmişi) -->
+
       <section class="glass admin-card" style="grid-column: 1 / -1;">
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+        <div
+          style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
           <h2 style="border-bottom: none; padding-bottom: 0; margin-bottom: 0;">
             <i class="fa-solid fa-clock-rotate-left" style="color: var(--secondary);"></i> İşlem Geçmişi (Audit Logs)
           </h2>
           <div style="display: flex; gap: 0.75rem; align-items: center;">
-            <input type="text" id="audit-search" class="form-control" placeholder="Loglarda ara (Kullanıcı, işlem vb.)..." style="width: 250px; font-size: 0.85rem; padding: 0.4rem 0.75rem;">
-            <button id="btn-refresh-audit" class="btn btn-secondary" style="font-size: 0.85rem; padding: 0.4rem 0.75rem;" title="Yenile">
+            <input type="text" id="audit-search" class="form-control"
+              placeholder="Loglarda ara (Kullanıcı, işlem vb.)..."
+              style="width: 250px; font-size: 0.85rem; padding: 0.4rem 0.75rem;">
+            <button id="btn-refresh-audit" class="btn btn-primary" style="font-size: 0.85rem; padding: 0.4rem 0.75rem;"
+              title="Yenile">
               <i class="fa-solid fa-rotate-right"></i> Yenile
             </button>
           </div>
